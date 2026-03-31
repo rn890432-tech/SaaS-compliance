@@ -1,19 +1,41 @@
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
 
 export async function POST(req) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.orgId) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
 
-    if (!body.userId || !body.documentId || !body.orgId) {
+    if (!body.documentId) {
       return Response.json(
-        { error: "userId, documentId, and orgId are required" },
+        { error: "documentId is required" },
         { status: 400 }
       );
     }
 
+    // Both orgId and userId are sourced from the session — never trusted from the client
+    const orgId = session.user.orgId;
+    const userId = session.user.id;
+
+    // Verify the document belongs to the session user's org before acknowledging
+    const doc = await prisma.document.findFirst({
+      where: { id: body.documentId, orgId },
+    });
+    if (!doc) {
+      return Response.json(
+        { error: "Document not found or access denied" },
+        { status: 404 }
+      );
+    }
+
     const payload = {
-      userId: body.userId,
+      userId,
       documentId: body.documentId,
       timestamp: new Date().toISOString(),
       metadata: body.metadata ?? {},
@@ -26,7 +48,7 @@ export async function POST(req) {
 
     const acknowledgment = await prisma.acknowledgment.create({
       data: {
-        userId: payload.userId,
+        userId,
         documentId: payload.documentId,
         status: "signed",
         hash,
@@ -36,7 +58,7 @@ export async function POST(req) {
 
     await prisma.auditLog.create({
       data: {
-        orgId: body.orgId,
+        orgId,
         eventType: "ACKNOWLEDGED",
         payload,
       },
