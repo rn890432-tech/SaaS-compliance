@@ -1,0 +1,59 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id        String     @id @default(uuid())
+  name      String
+  users     User[]
+  documents Document[]
+  createdAt DateTime   @default(now())
+}
+
+model User {
+  id              String           @id @default(uuid())
+  email           String           @unique
+  name            String?
+  role            String           @default("member")
+  orgId           String
+  org             Organization     @relation(fields: [orgId], references: [id])
+  createdAt       DateTime         @default(now())
+  acknowledgments Acknowledgment[]
+}
+
+model Document {
+  id              String           @id @default(uuid())
+  title           String
+  content         String
+  version         String           @default("1.0")
+  orgId           String
+  org             Organization     @relation(fields: [orgId], references: [id])
+  createdAt       DateTime         @default(now())
+  acknowledgments Acknowledgment[]
+}
+
+model Acknowledgment {
+  id         String   @id @default(uuid())
+  userId     String
+  documentId String
+  status     String   @default("signed")
+  hash       String
+  metadata   Json
+  createdAt  DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id])
+  document Document @relation(fields: [documentId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  orgId     String
+  eventType String
+  payload   Json
+  createdAt DateTime @default(now())
+}
